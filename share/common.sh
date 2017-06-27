@@ -265,11 +265,8 @@ EOF
 
     if [ ! -z "$routetlstype" ]; then
         local tlstypetmpl='.spec.tls.termination'
-        data=$(echo "$data" | jq -er "del($tlstypetmpl)")
-    fi
-
-    if [ "$routetlstype" != "edge" ]; then
         local policytmpl='.spec.tls.insecureEdgeTerminationPolicy'
+        data=$(echo "$data" | jq -er "del($tlstypetmpl)")
         data=$(echo "$data" | jq -er "del($policytmpl)")
     fi
 
