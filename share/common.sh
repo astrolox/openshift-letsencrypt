@@ -36,6 +36,10 @@ fullchainfile() {
     echo "$LETSENCRYPT_DATADIR/$1/fullchain"
 }
 
+routetlstypefile() {
+    echo "$LETSENCRYPT_DATADIR/$1/routetlstype"
+}
+
 err() {
     echo "${@-}" >&2
 }
@@ -128,11 +132,13 @@ get_certs_from_route() {
     local domain="$1" selflink="$2"
     local keytmpl='.spec.tls.key'
     local certtmpl='.spec.tls.certificate'
+    local tlstypetmpl='.spec.tls.termination'
 
     route_json="$(api_call "$selflink")"
     mkdir -p "$LETSENCRYPT_DATADIR/$domain"
     echo "$route_json" | jq -er "$certtmpl" > "$(fullchainfile "$domain")"
     echo "$route_json" | jq -er "$keytmpl" > "$(keyfile "$domain")"
+    echo "$route_json" | jq -er "$tlstypetmpl" > "$(routetlstypefile "$domain")"
     # don't bother with a split out cert
     cp "$(fullchainfile "$domain")" "$(certfile "$domain")"
 }
@@ -234,6 +240,8 @@ add_certificate_to_route() {
     local fullchainfile_; fullchainfile_="$(fullchainfile "$DOMAINNAME")"
     local key_sha256; key_sha256="$(hpkp_sha256 "$keyfile_")"
     local enddate_secs; enddate_secs="$(crt_enddate_secs "$certfile_")"
+    local routetlstype_; routetlstype_="$(routetlstypefile "$DOMAINNAME")"
+    local routetlstype; routetlstype="$(cat $routetlstype_)"
 
     local data; data="$(cat <<EOF
         { "metadata": {
@@ -254,6 +262,17 @@ add_certificate_to_route() {
         }
 EOF
     )"
+
+    if [ ! -z "$routetlstype" ]; then
+        local tlstypetmpl='.spec.tls.termination'
+        data=$(echo "$data" | jq -er "del($tlstypetmpl)")
+    fi
+
+    if [ "$routetlstype" != "edge" ]; then
+        local policytmpl='.spec.tls.insecureEdgeTerminationPolicy'
+        data=$(echo "$data" | jq -er "del($policytmpl)")
+    fi
+
     patch_route "$SELFLINK" "$data"
 }
 
